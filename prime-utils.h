@@ -9,14 +9,17 @@
 
 #include <math.h> 
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
 
 #define DEFAULTP          ((double) 1.96)
-#define DEFAULT_TMAX      (4)
+#define DEFAULT_TMAX      (12)
 #define P1                (0)
 #define P2                (1)
 #define QX                (0)
 #define IEX               (1)
 #define ERATIO            (2)
+#define PRIME             (2)
 
 class PrimesInInterval { 
 
@@ -34,12 +37,7 @@ class PrimesInInterval {
                
           }; 
           
-          class SieveE { 
-          
-               public: 
-                    static const bool is_prime(int n, int *esieve_array, int minp = 2); 
-                    
-          }; 
+          const int is_prime(int n, int minp = 2); 
 
           static double p2epsilon(double p); 
           static double epsilon2p(double eps); 
@@ -49,6 +47,7 @@ class PrimesInInterval {
           int Qx_size_from_t(int t); 
 
      private: 
+          bool initQ; 
           int *esieve_array; 
           lint_t *primes_array; 
           int esarr_size, parr_size, nsize; 
@@ -58,15 +57,16 @@ class PrimesInInterval {
           bool clear(); 
           
           lint_t * compute_prime_interval(int t, int &isize); 
-          lint_t * compute_prime_gaps(int maxt, int &asize); 
+          lint_t * compute_prime_gaps(int maxt, int &asize, lint_t prime_prospect); 
           lint_t compute_weight(int maxt, lint_t prime_prospect); 
           lint_t set_next_prime(int t); 
           
      public: 
-          PrimesInInterval(double ppow = DEFAULTP, int tmax = DEFAULT_TMAX); 
+          PrimesInInterval(); 
           PrimesInInterval(const PrimesInInterval &rhs); 
           ~PrimesInInterval(); 
           
+          bool initialize(int tmax = DEFAULT_TMAX); 
           PrimesInInterval & operator=(const PrimesInInterval &rhs); 
           const lint_t operator[](int t); 
           
@@ -75,6 +75,8 @@ class PrimesInInterval {
           lint_t * get_primes(int tmin, int tmax, int &asize); 
           
           lint_t compute_Iex(int t); 
+          
+          void print_stats() const; 
 
 }; 
 

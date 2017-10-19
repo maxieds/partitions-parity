@@ -7,9 +7,9 @@
 #include "utils.h"
 #include "prime-utils.h"
 
-double PrimesInInterval::ppow = 2.0;
+double PrimesInInterval::ppow = 1.96;
 double PrimesInInterval::epsilon = PrimesInInterval::p2epsilon(PrimesInInterval::ppow); 
-PrimesInInterval PrimesInIntervalInst(PrimesInInterval::ppow); 
+PrimesInInterval PrimesInIntervalInst; 
 
 int PrimesInInterval::Indicator::I1(lint_t j, lint_t pgap) { 
 
@@ -48,14 +48,15 @@ int PrimesInInterval::Indicator::indicator_sum(lint_t j, lint_t pgap) {
             
 } 
 
-const bool PrimesInInterval::SieveE::is_prime(int n, int *esieve_array, int minp) { 
+const int PrimesInInterval::is_prime(int n, int minp) { 
 
      if(n < 1)
           return false; 
-          
-     for(int p = MAX(2, minp); p * p <= n; p++) { 
      
-          if(esieve_array[p - 1]) { 
+     for(int p = 2; p * p <= n; p++) { 
+     
+          if(esieve_array[p - 1] != 0) { 
+               esieve_array[p - 1] = PRIME; 
                for(int i = 2 * p; i <= n; i += p)
                    esieve_array[i - 1] = 0;
           }
@@ -105,14 +106,18 @@ bool PrimesInInterval::init_arrays(int asize, bool copy_elts) {
 
      int *old_esieve_array = esieve_array; 
      esieve_array = (int *) malloc(asize * sizeof(int)); 
-     memset(esieve_array, 1, asize * sizeof(int)); 
      if(copy_elts && old_esieve_array != NULL) { 
           for(int n = 0; n < esarr_size; n++) 
                esieve_array[n] = old_esieve_array[n];
      } 
+     else if(!copy_elts) { 
+          memset(esieve_array, 0, asize * sizeof(int)); 
+          for(int i = 1; i < asize; i++) 
+               esieve_array[i] = 1; 
+     } 
      if(old_esieve_array != NULL)
           free(old_esieve_array); 
-     esarr_size = asize; 
+     esarr_size = (copy_elts ? esarr_size : 0); 
      
      lint_t *old_primes_array = primes_array; 
      primes_array = (lint_t *) malloc(asize * sizeof(lint_t)); 
@@ -123,7 +128,7 @@ bool PrimesInInterval::init_arrays(int asize, bool copy_elts) {
      } 
      if(old_primes_array != NULL) 
           free(old_primes_array); 
-     parr_size = 0; 
+     parr_size = (copy_elts ? parr_size : 0); 
      nsize = asize; 
      
      return true; 
@@ -169,17 +174,19 @@ bool PrimesInInterval::clear() {
 
 lint_t * PrimesInInterval::compute_prime_interval(int t, int &isize) { 
 
-     int pmin = (int) CEILING(POW(t, ppow)), pmax = (int) FLOOR(POW(t + 1, ppow)); 
+     int pmin = (int) MAX(3, CEILING(POW(t, ppow))), pmax = (int) MAX(3, FLOOR(POW(t + 1, ppow))); 
      isize = pmax - pmin + 1; 
      if(nsize < isize + pmin) { // resize the storage arrays: 
-          PrimesInInterval::init_arrays(2 * (isize + pmin), true); 
+          fprintf(stderr, "BIG ERROR II! %d, %d; %d, %d; %d\n", nsize, isize, pmin, pmax, t); 
+          abort(); 
      } 
      int qidx = 0; 
      lint_t *primes = (lint_t *) malloc(isize * sizeof(lint_t)); 
-     for(int q = 0; q < MIN(isize, nsize - pmin); q++) { 
-          bool primeQ = PrimesInInterval::SieveE::is_prime(pmin + q, esieve_array); 
-          if(primeQ)
+     for(int q = 0; q < isize; q++) { 
+          int primeQ = PrimesInIntervalInst.is_prime(pmin + q); 
+          if(primeQ != 0) { 
                primes[qidx++] = pmin + q; 
+          } 
      } 
      
      if(qidx == 0) { 
@@ -198,22 +205,19 @@ lint_t * PrimesInInterval::compute_prime_interval(int t, int &isize) {
 
 } 
 
-lint_t * PrimesInInterval::compute_prime_gaps(int tmax, int &asize) { 
+lint_t * PrimesInInterval::compute_prime_gaps(int tmax, int &asize, lint_t prime_prospect) { 
 
      if(tmax > parr_size) 
-          fprintf(stderr, "BIG PROBLEM!\n"); 
+          fprintf(stderr, "BIG PROBLEM! %d, %d\n", tmax, parr_size); 
      int pgidx = 0; 
-     asize = tmax / 2.0 * (tmax - 1); 
+     asize = (int) tmax / 2.0 * (tmax + 1); 
      lint_t *prime_gaps = (lint_t *) malloc(asize * sizeof(lint_t)); 
-     fprintf(stdout, "&& "); Utils::print_array(primes_array, parr_size); 
-     fprintf(stdout, "\n"); 
      for(int i = 0; i < tmax; i++) { 
-          for(int s = i + 1; s < tmax; s++) 
-               prime_gaps[pgidx++] = primes_array[s] - primes_array[i]; 
+          for(int s = i + 1; s <= tmax; s++) { 
+               lint_t larger_prime = (s == tmax ? prime_prospect : primes_array[s]); 
+               prime_gaps[pgidx++] = larger_prime - primes_array[i]; 
+          } 
      } 
-     
-     fprintf(stdout, "Prime Gaps(%d): ", tmax); Utils::print_array(prime_gaps, asize); 
-     fprintf(stdout, "\n"); 
      
      return prime_gaps; 
      
@@ -221,16 +225,16 @@ lint_t * PrimesInInterval::compute_prime_gaps(int tmax, int &asize) {
 
 lint_t PrimesInInterval::compute_weight(int maxt, lint_t prime_prospect) { 
 
-     primes_array[maxt] = prime_prospect; 
+     if(maxt > nsize) {  
+          abort(); 
+     } 
      int pgarr_size = 0; 
-     lint_t *prime_gaps = PrimesInInterval::compute_prime_gaps(maxt + 1, pgarr_size); 
+     lint_t *prime_gaps = PrimesInInterval::compute_prime_gaps(maxt, pgarr_size, prime_prospect); 
      int isum = 0; 
-     //lint_t dmax = Utils::find_array_max(prime_gaps, pgarr_size); 
      for(int g = 0; g < pgarr_size; g++) { 
           for(int j = 1; j <= FLOOR(SQRT(prime_gaps[g])); j++) 
                isum += PrimesInInterval::Indicator::indicator_sum(j, prime_gaps[g]); 
      } 
-     
      return isum; 
      
 } 
@@ -238,18 +242,15 @@ lint_t PrimesInInterval::compute_weight(int maxt, lint_t prime_prospect) {
 lint_t PrimesInInterval::set_next_prime(int t) { 
 
      if(t < 1) 
-          return 0; 
+          abort(); 
      else if(t == 1) { 
-          primes_array[0] = 3; 
+          primes_array[0] = 2; 
           ++parr_size; 
-          return 3; 
-     } 
-     else if(t >= nsize) { 
-          PrimesInInterval::init_arrays(2 * nsize, true); 
+          return 2; 
      } 
      
      int ptarr_size = 0; 
-     lint_t *primest = PrimesInInterval::compute_prime_interval(t, ptarr_size); 
+     lint_t *primest = PrimesInInterval::compute_prime_interval(t - 1, ptarr_size); 
      lint_t *pweights = (lint_t *) malloc(ptarr_size * sizeof(lint_t)); 
      lint_t *pweights_temp = (lint_t *) malloc(ptarr_size * sizeof(lint_t)); // ERROR HERE!! 
      for(int p = 0; p < ptarr_size; p++) { 
@@ -273,16 +274,34 @@ lint_t PrimesInInterval::set_next_prime(int t) {
      
 } 
 
-PrimesInInterval::PrimesInInterval(double ppowp, int tmax) : 
-     esieve_array(NULL), primes_array(NULL), esarr_size(0), parr_size(0), nsize(0) { 
+bool PrimesInInterval::initialize(int tmax) { 
      
-     ppow = ppowp; 
+     if(initQ) { 
+          fprintf(stderr, "Error: Object already initialized (create another one).\n"); 
+          abort(); 
+     } 
+     else if(tmax < 1) 
+          abort(); 
      epsilon = PrimesInInterval::p2epsilon(ppow); 
-     PrimesInInterval::init_arrays(tmax, false); 
-     for(int t = 1; t <= tmax; t++) 
+     int tcapacity = (int) (CEILING(POW(1 + tmax, ppow)) + 1); 
+     PrimesInInterval::init_arrays(tcapacity, false); 
+     esarr_size = nsize; 
+     time_t start_time = time(NULL); 
+     for(int t = 1; t <= tmax; t++) { 
+          double seconds = difftime(time(NULL), start_time); 
+          fprintf(stderr, "   >> Currently initializing [t = % 9d of %d] prime intervals ... ", t, tmax); 
+          fprintf(stderr, "(TOTAL TIME ELAPSED: % 8g secs / % 8e mins / % 8e hrs / % 8e days)\n", 
+                  seconds, seconds / 60.0, seconds / 3600.0, seconds / 3600.0 / 24.0); 
           PrimesInIntervalInst.set_next_prime(t); 
+     } 
+     initQ = true; 
      
+     return initQ; 
 } 
+
+PrimesInInterval::PrimesInInterval() : 
+     esieve_array(NULL), primes_array(NULL), esarr_size(0), 
+     parr_size(0), nsize(0), initQ(false) {} 
 
 PrimesInInterval::PrimesInInterval(const PrimesInInterval &rhs) { 
 
@@ -308,13 +327,10 @@ PrimesInInterval & PrimesInInterval::operator=(const PrimesInInterval &rhs) {
 
 const lint_t PrimesInInterval::operator[](int t) { 
 
-     if(t < 1) 
-          return 0; 
-     else if(t <= nsize) 
+     if(t <= nsize) 
           return primes_array[t - 1]; 
      else { 
-          PrimesInInterval::init_arrays(2 * nsize, true); 
-          return primes_array[t - 1]; 
+          abort();
      } 
 
 } 
@@ -346,7 +362,6 @@ lint_t PrimesInInterval::compute_Iex(int t) {
 
      int pgarr_size = 0; 
      lint_t *prime_gaps = PrimesInIntervalInst.get_primes(t, pgarr_size); 
-     //lint_t dmax = Utils::find_array_max(prime_gaps, pgarr_size); 
      lint_t isum = 0; 
      for(int pidx = 0; pidx < pgarr_size; pidx++) { 
           for(int j = 1; j <= FLOOR(SQRT(prime_gaps[pidx])); j++) { 
@@ -356,6 +371,17 @@ lint_t PrimesInInterval::compute_Iex(int t) {
      return isum; 
 
 } 
+
+void PrimesInInterval::print_stats() const { 
+
+     fprintf(stdout, "  >> STATS: PPOW=% 4g, EPS=% 4g; ARRSIZES(%d, %d, %d)\n", 
+             ppow, epsilon, esarr_size, parr_size, nsize); 
+     fprintf(stdout, "  >> STATS: "); 
+     Utils::print_array(primes_array, parr_size); 
+     fprintf(stdout, "\n"); 
+
+} 
+
 
 PIntRecord::PIntRecord() {} 
 

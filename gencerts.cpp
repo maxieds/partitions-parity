@@ -51,7 +51,7 @@ class runopts_t {
                          case '0': 
                               tmin = atoi(optarg);
                               if(tmin < 1 || tmin > tmax) { 
-                                   fprintf(stderr, "--tmin TMIN: argument must be >= 1.\n"); 
+                                   fprintf(stderr, "--tmin TMIN: argument must be >= 1, <= TMAX.\n"); 
                                    print_usage_exit = true; 
                               } 
                               break; 
@@ -118,11 +118,10 @@ class runopts_t {
 
 int main(int argc, char **argv) { 
 
-     double ppow = 1.96; // our default, go-to better bound 
      runopts_t runopts(argc, argv); 
-     //PrimesInInterval pints(ppow, runopts.tmax); 
      
      int tmin = runopts.tmin, tmax = runopts.tmax; 
+     PrimesInIntervalInst.initialize(tmax); 
      int record_size = tmax - tmin + 1; 
      PIntRecord *precs = new PIntRecord[record_size]; 
      vector<double> tvals(record_size), error_ratios(record_size); 
@@ -133,8 +132,12 @@ int main(int argc, char **argv) {
           tvals.at(t - 1) = (double) t; 
           if(!runopts.quiet) { 
                precs[t - 1].print(); 
+               //PrimesInIntervalInst.print_stats(); 
           } 
      } 
+     
+     // TODO: file path saving / output 
+     
      if(!runopts.quiet) 
           fprintf(stdout, "\n"); 
      
@@ -147,8 +150,6 @@ int main(int argc, char **argv) {
      plt::xlim(350, tmax);
      plt::legend(); 
      plt::save("./error-ratios.png"); 
-     //plt::show(); 
-     //usleep(20); 
      
      return 0; 
      
